@@ -5,8 +5,17 @@ Automated verification suite for DLOI-Pose mathematical bounds,
 kinematic acceleration gating, and aerial occlusion logic.
 """
 
+import sys
+from pathlib import Path
 import unittest
 import numpy as np
+
+# Dynamicky pridá koreňový priečinok projektu do sys.path (funguje out-of-the-box)
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from src.features.lane_occlusion import DefensiveLaneOcclusion
 
 
