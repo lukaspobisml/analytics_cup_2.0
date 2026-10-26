@@ -239,7 +239,7 @@ class TestReproducibility(unittest.TestCase):
                                   temporal_df=pd.DataFrame({"t_sec": [0, 1], "Any target name": [0.2, 0.3]}))
         self.assertEqual(len(fig.axes), 2)
         fig.canvas.draw()
-        self.assertTrue(any(text.get_text() == "Any target name" for text in fig.axes[0].texts))
+        self.assertTrue(any("Any target name" in text.get_text() for text in fig.texts))
         with self.assertRaises(ValueError):
             plot_defensive_lanes(np.zeros(2), np.zeros(2), np.empty((0, 2)), [], {},
                                  temporal_df=pd.DataFrame({"wrong": [0]}))
@@ -264,6 +264,20 @@ class TestReproducibility(unittest.TestCase):
         for line, column in zip(fig.axes[1].lines, temporal.columns[1:]):
             np.testing.assert_array_equal(line.get_ydata(), temporal[column])
 
+    def test_coverage_grid_validation_and_rendering(self):
+        args = (np.zeros(2), np.zeros(2), np.empty((0, 2)), [], {})
+        fig = plot_defensive_lanes(*args, coverage_grid=([-5, 5], [-2, 2], [[0.1, 0.2], [0.3, 0.4]]))
+        fig.canvas.draw()
+        self.assertEqual(len(fig.axes), 2)
+        for grid in (
+            ([0, 1], [0, 1], [[0]]),
+            ([1, 0], [0, 1], np.zeros((2, 2))),
+            ([0, 1], [0, 1], np.full((2, 2), np.nan)),
+            ([0, 1], [0, 1], np.full((2, 2), 1.1)),
+        ):
+            with self.assertRaisesRegex(ValueError, "coverage_grid"):
+                plot_defensive_lanes(*args, coverage_grid=grid)
+
     def test_notebook_source_executes_without_downloads(self):
         notebook = json.loads((ROOT / "notebooks/defensive_lane_occlusion.ipynb").read_text())
         namespace = {"display": lambda value: None}
@@ -272,4 +286,25 @@ class TestReproducibility(unittest.TestCase):
                 if cell["cell_type"] == "code":
                     self.assertEqual(cell["outputs"], [])
                     exec(compile("".join(cell["source"]), "notebook", "exec"), namespace)
-        self.assertEqual(len(namespace["fig"].axes), 2)
+        self.assertEqual(len(namespace["fig"].axes), 3)  # Pitch, temporal panel and colorbar.
+        self.assertEqual(len(namespace["targets"]), 16)
+        self.assertEqual(len(namespace["comparison"]), 16)
+        self.assertEqual(len(namespace["temporal_df"].columns), 17)
+        self.assertEqual(len(namespace["players"]), 10)
+        self.assertEqual(len(namespace["teammates"]), 10)
+        self.assertIsNotNone(namespace["goalkeeper_xy"])
+        self.assertEqual(namespace["coverage"].shape, (29, 43))
+        options = namespace["passing_options"](namespace["frames"][20], 20)
+        receiver = next(p for p in namespace["frames"][20]["player_data"] if p["player_id"] == 965698)
+        np.testing.assert_array_equal(options["Feet: J. Brazete"][0], [receiver["x"], receiver["y"]])
+        self.assertFalse(np.array_equal(options["Feet: J. Brazete"][0], namespace["targets"]["Feet: J. Brazete"][0]))
+        velocities = compute_frame_velocities(namespace["frames"], 20)
+        np.testing.assert_allclose(
+            options["Run +0.8s: J. Brazete"][0],
+            np.clip(np.array([receiver["x"], receiver["y"]]) + 0.8 * velocities[965698], [-52.5, -34], [52.5, 34]),
+        )
+        self.assertTrue(all(not is_aerial for _, is_aerial in options.values()))
+        np.testing.assert_allclose(
+            namespace["temporal_df"].iloc[0, 1:].to_numpy(dtype=float),
+            namespace["comparison"]["pose_proxy"].to_numpy(),
+        )

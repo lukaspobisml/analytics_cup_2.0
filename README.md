@@ -17,12 +17,9 @@ clearance claims. `is_aerial=True` and an explicit `max_aerial_reach_m` now rais
 `NotImplementedError`, including on an empty pitch. No absolute elevation is
 inferred from ankles, noses, or the centroid.
 
-The former numerical result tables, claimed aerial benefit, causal scanning
-interpretations, and season ranking claims have been withdrawn pending
-reproduction and appropriate validation. In particular, neck-to-nose direction
-is **not eye gaze**, and instantaneous head/torso disagreement is not scanning
-range. The old `assets/figure1_dloi_pose.png` is a historical, unvalidated
-illustration and should not be used as evidence for the current model.
+Former aerial, causal scanning and season-ranking claims are withdrawn pending
+validation. Neck-to-nose direction is **not eye gaze** or scanning range.
+`assets/figure1_dloi_pose.png` is historical, not evidence for the current model.
 
 ## Implemented algorithm
 
@@ -67,17 +64,23 @@ targets and must not be interpreted as causal or complete defensive value.
 Python 3.9 or newer is required.
 
 ```bash
-git clone https://github.com/lukaspobisml/analytics_cup_2.0.git
+git clone --branch lpobis-cen58041-dloi-pose-audit-and-fixes https://github.com/lukaspobisml/analytics_cup_2.0.git
 cd analytics_cup_2.0
 python -m pip install -e ".[notebook]"
 python -m unittest discover -s tests -v
 jupyter notebook notebooks/defensive_lane_occlusion.ipynb
 ```
 
-The notebook uses only the committed compressed phase sample, without downloads
-or installation commands inside cells. It demonstrates ground scoring,
-quality reports, attribution and temporal plotting; it makes no empirical
-validation claim. Outputs are intentionally cleared in version control.
+The notebook compares **16 ground options**: ten teammates to feet, three
+0.8-second constant-velocity run scenarios, and three analyst-selected spaces.
+Feet/run targets update each frame. All 22 sample players are shown; a background
+map scores passes from the ball to grid points, **not pitch control**.
+All lanes have baseline/pose comparisons and temporal summaries; six are plotted
+over time. Run scenarios do not infer intent, offside or receiver arrival.
+The defending goalkeeper is contextual only, excluded from scoring.
+The compressed sample runs without downloads; notebook outputs remain cleared.
+
+![Sixteen ground-pass options, lane-occlusion map and moving-target time series](assets/ground_pass_options.png)
 
 ```python
 import numpy as np
@@ -100,9 +103,8 @@ are rejected. A zero-length ground pass or no defenders returns zero.
 - `src/data/pose_loading.py` streams the packaged compressed sample. Full-match
   downloads are explicit (~600 MB each); cached and new downloads are checked
   against manifest size and SHA256 before reuse/publication.
-- The upstream manifest URL currently uses mutable `main`. Checksums detect
-  content changes but do not pin the upstream revision. Full matches were not
-  downloaded for the audit.
+- Upstream uses mutable `main`; checksums detect changes without pinning a
+  revision. No full matches were downloaded.
 - Pose is 25 fps, tracking is 10 fps. Frame conversions are explicit. Velocity
   estimation uses actual frame gaps within the same period. Its centered
   differences use future observations and are for retrospective analysis.
@@ -113,17 +115,14 @@ are rejected. A zero-length ground pass or no defenders returns zero.
   outfield defense. The caller must select opponents and roles.
 - Wheels include the manifest and compressed sample, with explicit `src.*`
   package discovery. CI imports the installed package outside the checkout.
-- `src.data.basic_loading.load_match` explicitly returns events, phases and a
-  lazy tracking iterator; importing that module no longer loads a full match.
-- Build the minimal documentation site with `python -m pip install -e ".[docs]"`
-  and `python -m mkdocs build --strict`.
+- `src.data.basic_loading.load_match` returns event/phase tables and lazy tracking.
+- Build docs with `python -m pip install -e ".[docs]"` then `python -m mkdocs build --strict`.
 
 ## Remaining limitations and audit follow-up
 
-Ground kernels, time constants, target choices and pose blending need
-sensitivity analysis and held-out outcome calibration. The short single-period
-sample cannot establish full-match behavior or causal tactical conclusions.
-Off-camera coverage, detection errors and pose/XY misalignment remain material
+Ground kernels and pose blending need sensitivity analysis and held-out
+calibration. This single-period sample cannot establish full-match behavior or
+causality. Off-camera coverage, detection errors and pose/XY misalignment remain
 sources of bias.
 
 Phase aggregation now isolates match/period transitions and per-match counts;
@@ -133,7 +132,6 @@ values even where intervals overlap, while opportunity counts merge intervals.
 An opportunity-level value definition (e.g. maximum versus first value) is
 unresolved and was deliberately not guessed.
 
-Height-aware scoring requires validated pitch-relative player reach and ball
-trajectory inputs before reintroduction. The historical season/tactical results
-need a reproducible analysis with explicit denominators, coverage, uncertainty,
-and provenance before they can be republished.
+Height-aware scoring needs validated pitch-relative reach/trajectory inputs.
+Historical results need reproducible denominators, coverage, uncertainty and
+provenance before republication.
