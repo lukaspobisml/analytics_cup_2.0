@@ -9,20 +9,28 @@ Traditional defensive tracking analytics rely on 2D circular pitch control model
 ## 2. Mathematical Formulation
 Passing lane occlusion $\text{DLOI} \in [0, 1]$ is evaluated along the trajectory $\vec{r}(\lambda) = \vec{p}_{\text{ball}} + \lambda(\vec{p}_{\text{target}} - \vec{p}_{\text{ball}})$ for $\lambda \in [0.05, 1.0]$:
 
-1. **Turf Deceleration & Arrival Horizon:**
-   $$v_{\text{eff}}(\lambda) = \max\left(9.0, v_{\text{ball}} - 0.12 \cdot L \cdot \lambda\right), \quad t_{\text{total}}(\lambda) = \frac{\lambda L}{v_{\text{eff}}(\lambda)} + t_{\text{control}}(\lambda)$$
+**1. Turf Deceleration & Arrival Horizon:**
 
-2. **Dual 3D Pose Anatomical Gating:**
-   Unit vectors for torso orientation $\hat{n}_{\text{torso}}$ (perpendicular to shoulders) and head-gaze $\hat{n}_{\text{gaze}}$ (neck-to-nose vector) form a unified heading $\hat{n}_j = 0.60\,\hat{n}_{\text{torso}} + 0.40\,\hat{n}_{\text{gaze}}$. Alignment with the passing ray $\cos\phi_j = \hat{n}_j \cdot \frac{\vec{r}(\lambda) - \vec{p}_j}{\|\vec{r}(\lambda) - \vec{p}_j\|}$ governs physical reaction delay $\tau_{\text{react}}$ and explosive acceleration $a_{\text{eff}}$:
-   $$\tau_{\text{react}}(\phi_j) = 0.58 - 0.42\left(\frac{1 + \cos\phi_j}{2}\right), \quad a_{\text{eff}}(\phi_j) = 1.80 + 3.20\left(\frac{1 + \cos\phi_j}{2}\right)$$
+$$v_{\text{eff}}(\lambda) = \max\left(9.0,\; v_{\text{ball}} - 0.12 \cdot L \cdot \lambda\right), \qquad t_{\text{total}}(\lambda) = \frac{\lambda L}{v_{\text{eff}}(\lambda)} + t_{\text{control}}(\lambda)$$
 
-3. **Spatiotemporal Interception & 3D Aerial Clearance:**
-   $$\Delta t_{\text{active}} = \max\left(0, t_{\text{total}}(\lambda) - \tau_{\text{react}}\right), \quad R_{\text{eff}, j}(\lambda) = r_{\text{lunge}} + \frac{1}{2} a_{\text{eff}} (\Delta t_{\text{active}})^{1.8}$$
-   $$H_j(\lambda) = \max\left( \exp\left(-\frac{1}{2}\left[\frac{\|\vec{r}(\lambda) - \vec{p}_j\|}{r_{\text{body}}}\right]^2\right), \exp\left(-\frac{1}{2}\left[\frac{\|\vec{r}(\lambda) - \vec{p}_{j, \text{drift}}\|}{R_{\text{eff}, j}(\lambda)}\right]^{2.6}\right) \right) \cdot \Gamma_{\text{aerial}, j}$$
-   For lofted trajectories $z_{\text{ball}}(\lambda)$, clearance over the defender's maximum vertical reach ($z_{\text{nose}} + 0.65\text{ m}$) attenuates risk via exponential decay $\Gamma_{\text{aerial}, j} = \exp\left(-0.5 [\max(0, z_{\text{ball}} - z_{\text{max}})/0.35]^2\right)$.
+**2. Dual 3D Pose Anatomical Gating:**
+Unit vectors for torso orientation $\hat{n}_{\text{torso}}$ (perpendicular to shoulders) and head-gaze $\hat{n}_{\text{gaze}}$ (neck-to-nose vector) form a unified heading $\hat{n}_j = 0.60\,\hat{n}_{\text{torso}} + 0.40\,\hat{n}_{\text{gaze}}$. Alignment with the passing ray $\cos\phi_j = \hat{n}_j \cdot \frac{\vec{r}(\lambda) - \vec{p}_j}{\|\vec{r}(\lambda) - \vec{p}_j\|}$ governs physical reaction delay $\tau_{\text{react}}$ and acceleration $a_{\text{eff}}$:
 
-4. **Counterfactual Cover Shadow Attribution:**
-   $$\Delta\text{DLOI}_j = \max_{k \in \text{lanes}} \left( \text{DLOI}_{\text{full}}^{(k)} - \text{DLOI}_{-j}^{(k)} \right)$$
+$$\tau_{\text{react}}(\phi_j) = 0.58 - 0.42\left(\frac{1 + \cos\phi_j}{2}\right), \qquad a_{\text{eff}}(\phi_j) = 1.80 + 3.20\left(\frac{1 + \cos\phi_j}{2}\right)$$
+
+**3. Spatiotemporal Interception & 3D Aerial Clearance:**
+
+$$\Delta t_{\text{active}} = \max\left(0,\; t_{\text{total}}(\lambda) - \tau_{\text{react}}\right), \qquad R_{\text{eff}, j}(\lambda) = r_{\text{lunge}} + \frac{1}{2} a_{\text{eff}} (\Delta t_{\text{active}})^{1.8}$$
+
+$$H_j(\lambda) = \max\left( \exp\left(-\frac{1}{2}\left[\frac{\|\vec{r}(\lambda) - \vec{p}_j\|}{r_{\text{body}}}\right]^2\right),\; \exp\left(-\frac{1}{2}\left[\frac{\|\vec{r}(\lambda) - \vec{p}_{j, \text{drift}}\|}{R_{\text{eff}, j}(\lambda)}\right]^{2.6}\right) \right) \cdot \Gamma_{\text{aerial}, j}$$
+
+For lofted trajectories $z_{\text{ball}}(\lambda)$, clearance over the defender's maximum vertical reach ($z_{\text{nose}} + 0.65\text{ m}$) attenuates risk via exponential decay:
+
+$$\Gamma_{\text{aerial}, j} = \exp\left( -0.5 \left[ \frac{\max(0,\; z_{\text{ball}}(\lambda) - z_{\text{max}})}{0.35} \right]^2 \right)$$
+
+**4. Counterfactual Cover Shadow Attribution:**
+
+$$\Delta\text{DLOI}_j = \max_{k \in \text{lanes}} \left( \text{DLOI}_{\text{full}}^{(k)} - \text{DLOI}_{-j}^{(k)} \right)$$
 
 ---
 
@@ -63,9 +71,9 @@ Engineered for native integration into `databallpy` / `kloppy`:
 * `src/features/lane_occlusion.py`: Vectorized DLOI-Pose engine with 3D aerial trajectories and LOO attribution.
 * `src/visualization/pitch_viz.py`: Publication-grade two-panel spatial-temporal plotting.
 
-bash
+```bash
 git clone [https://github.com/lukaspobisml/analytics_cup_2.0.git](https://github.com/lukaspobisml/analytics_cup_2.0.git)
-cd dloi-pose
+cd analytics_cup_2.0
 pip install -e .
-pytest tests/
-jupyter notebook notebooks/defensive_lane_occlusion.ipynb
+python -m unittest discover tests
+jupyter notebook defensive_lane_occlusion.ipynb
