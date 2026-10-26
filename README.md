@@ -40,7 +40,6 @@ $$\Delta\text{DLOI}_j = \max_{k \in \text{lanes}} \left( \text{DLOI}_{\text{full
 ![Figure 1: Spatial DLOI-Pose and Temporal Windows](assets/figure1_dloi_pose.png)
 *Figure 1: Match 1925299 (Phase 406). Panel A: 22 active players, 3D body pose reach/gaze cones, and tactical passing options [A]–[G]. Dashed lane [E] represents the 3D Aerial Lob over T. Mrčela. Panel B: Temporal evolution across build-up (25fps), highlighting the 3D Aerial clearance gain (shaded area) and the early central window (0.0s–1.0s).*
 
-
 ### Table 1: Multi-Dimensional Defensive Attribution & Season Benchmark
 | Player | Position | Peak $\Delta\text{DLOI}$ | Mean $\Delta\text{DLOI}$ | Shadow Share | 3D Scan $\Delta\psi$ (Mean / P90) | Phase Speed | Season OTIP |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -56,8 +55,6 @@ $$\Delta\text{DLOI}_j = \max_{k \in \text{lanes}} \left( \text{DLOI}_{\text{full
 | **K. Majekodunmi**| Central Def| 0.000 | 0.000 | 0.0% | **25.0° / 36.8°** | 1.10 m/s | N/A (<Min) |
 
 *Season Physical Benchmarks (A-League Physical Aggregates, N=406): League Mean OTIP = 154.8 m/min, Median = 153.2 m/min, 95th Percentile = 178.6 m/min; Top Season PSV-99: R. Warland (29.7 km/h), J. Carluccio (29.2 km/h).*
-
-*Benchmark Context (A-League Season Physical Aggregates, N=406): Mean OTIP = 154.8 m/min, Median = 153.2 m/min, 95th Percentile = 178.6 m/min.*
 
 ### Tactical Findings
 1. **Uncovering Non-Contact Value:** Taras Gomulka generated **49.7%** of Perth Glory's marginal cover shadow without recording an event tackle or interception. His spatial containment closed option [D] (occlusion rising from 0.15 to 0.81), directly explained by his league-leading off-ball workload (**172.1 m/min OTIP**, top 5% league-wide).
