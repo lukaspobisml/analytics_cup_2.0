@@ -234,9 +234,10 @@ class DefensiveLaneOcclusion:
         # 7. Integration: Bottleneck risk + Cumulative exposure
         bottleneck_risk = float(np.max(point_hazards))
         flight_penalty = 1.0 + 0.02 * pass_len
-        cumulative_exposure = float(np.trapz(point_hazards, lambdas)) * flight_penalty
+        # Univerzálna integrácia bez DeprecationWarning (kompatibilná s NumPy 1.x aj 2.x)
+        trapz_fn = getattr(np, "trapezoid", getattr(np, "trapz", None))
+        cumulative_exposure = float(trapz_fn(point_hazards, lambdas)) * flight_penalty       
         occlusion = 1.0 - (1.0 - bottleneck_risk) * math.exp(-0.60 * cumulative_exposure)
-
         return float(np.clip(occlusion, 0.0, 1.0))
 
     def compute_counterfactual_attribution(

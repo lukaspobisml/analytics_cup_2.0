@@ -64,7 +64,7 @@ Engineered for native integration into `databallpy` / `kloppy`:
 * `src/visualization/pitch_viz.py`: Publication-grade two-panel spatial-temporal plotting.
 
 bash
-git clone [https://github.com/your-repo/dloi-pose.git](https://github.com/your-repo/dloi-pose.git)
+git clone [https://github.com/lukaspobisml/analytics_cup_2.0.git](https://github.com/lukaspobisml/analytics_cup_2.0.git)
 cd dloi-pose
 pip install -e .
 pytest tests/
