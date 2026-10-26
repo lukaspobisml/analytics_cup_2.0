@@ -244,6 +244,26 @@ class TestReproducibility(unittest.TestCase):
             plot_defensive_lanes(np.zeros(2), np.zeros(2), np.empty((0, 2)), [], {},
                                  temporal_df=pd.DataFrame({"wrong": [0]}))
 
+    def test_legacy_temporal_columns_do_not_require_central_break_pose(self):
+        temporal = pd.DataFrame({
+            "t_sec": [0., 0.08],
+            "Central Line Break": [0.4, 0.5],
+            "Left Half-Space (K. Jelacic)": [0.2, 0.3],
+            "Wide Wing Run (3D Pose)": [0.1, 0.15],
+        })
+        self.assertNotIn("Central_Break_Pose", temporal)
+        fig = plot_defensive_lanes(
+            np.zeros(2), np.zeros(2), np.empty((0, 2)), [], {},
+            temporal_df=temporal,
+        )
+        fig.canvas.draw()
+        self.assertEqual(
+            [line.get_label() for line in fig.axes[1].lines],
+            list(temporal.columns[1:]),
+        )
+        for line, column in zip(fig.axes[1].lines, temporal.columns[1:]):
+            np.testing.assert_array_equal(line.get_ydata(), temporal[column])
+
     def test_notebook_source_executes_without_downloads(self):
         notebook = json.loads((ROOT / "notebooks/defensive_lane_occlusion.ipynb").read_text())
         namespace = {"display": lambda value: None}
