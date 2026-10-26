@@ -40,19 +40,22 @@ $$\Delta\text{DLOI}_j = \max_{k \in \text{lanes}} \left( \text{DLOI}_{\text{full
 ![Figure 1: Spatial DLOI-Pose and Temporal Windows](assets/figure1_dloi_pose.png)
 *Figure 1: Match 1925299 (Phase 406). Panel A: 22 active players, 3D body pose reach/gaze cones, and tactical passing options [A]–[G]. Dashed lane [E] represents the 3D Aerial Lob over T. Mrčela. Panel B: Temporal evolution across build-up (25fps), highlighting the 3D Aerial clearance gain (shaded area) and the early central window (0.0s–1.0s).*
 
-### Table 1: Multi-Dimensional Defensive Attribution & Season League-Wide Benchmark
-| Player | Role | Peak $\Delta\text{DLOI}$ | Mean $\Delta\text{DLOI}$ | Team Shadow Share | Mean Scan ($\Delta\psi$) | P90 Scan | Phase Speed | Season OTIP (m/min) | Season HSR OTIP (m) | Season PSV-99 |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **T. Gomulka** | Midfield | **0.991** | **0.184** | **49.7%** | 12.1° | 22.2° | 3.45 m/s | **172.1** | 375.7 m | 26.8 km/h |
-| **T. Mrčela** | Central Def | 0.986 | **0.085** | **23.0%** | **19.6°** | 30.4° | 3.16 m/s | 139.9 | 241.7 m | 26.5 km/h |
-| **J. Risdon** | Full Back | 0.442 | **0.044** | **11.9%** | 19.1° | **32.9°** | 2.62 m/s | 139.8 | 340.6 m | 28.4 km/h |
-| **N. Pennington**| Center Fwd | 0.920 | **0.042** | **11.4%** | 15.3° | 27.5° | 3.54 m/s | 170.3 | 350.1 m | 26.3 km/h |
-| **R. Warland** | Full Back | 0.308 | 0.009 | 2.4% | N/A (Off-cam) | N/A | **4.06 m/s** | 148.1 | 388.0 m | **29.7 km/h** |
-| **J. Carluccio** | Full Back | 0.216 | 0.005 | 1.4% | 11.1° | 19.3° | 4.02 m/s | 151.8 | **473.6 m** | 29.2 km/h |
-| **D. Williams** | Wide Attacker| 0.123 | 0.001 | 0.3% | 12.7° | 24.2° | 3.90 m/s | 142.1 | 183.5 m | 28.0 km/h |
-| **A. Lebib** | Central Def | 0.004 | 0.000 | 0.0% | 14.6° | 32.6° | 2.63 m/s | 139.9 | 238.9 m | 29.6 km/h |
-| **K. Ngo** | Wide Attacker| 0.000 | 0.000 | 0.0% | 8.1° | 16.7° | 3.95 m/s | 146.5 | 302.5 m | 28.0 km/h |
-| **K. Majekodunmi**| Central Def| 0.000 | 0.000 | 0.0% | **25.0°** | **36.8°** | 1.10 m/s | N/A | N/A | N/A |
+
+### Table 1: Multi-Dimensional Defensive Attribution & Season Benchmark
+| Player | Position | Peak $\Delta\text{DLOI}$ | Mean $\Delta\text{DLOI}$ | Shadow Share | 3D Scan $\Delta\psi$ (Mean / P90) | Phase Speed | Season OTIP |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **T. Gomulka** | Midfield | **0.991** | **0.184** | **49.7%** | 12.1° / 22.2° | 3.45 m/s | **172.1 m/min** |
+| **T. Mrčela** | Central Def | 0.986 | **0.085** | **23.0%** | **19.6°** / 30.4° | 3.16 m/s | 139.9 m/min |
+| **J. Risdon** | Full Back | 0.442 | **0.044** | **11.9%** | 19.1° / **32.9°** | 2.62 m/s | 139.8 m/min |
+| **N. Pennington**| Center Fwd | 0.920 | **0.042** | **11.4%** | 15.3° / 27.5° | 3.54 m/s | 170.3 m/min |
+| **R. Warland** | Full Back | 0.308 | 0.009 | 2.4% | N/A (Off-Camera) | **4.06 m/s** | 148.1 m/min |
+| **J. Carluccio** | Full Back | 0.216 | 0.005 | 1.4% | 11.1° / 19.3° | 4.02 m/s | 151.8 m/min |
+| **D. Williams** | Wide Attacker| 0.123 | 0.001 | 0.3% | 12.7° / 24.2° | 3.90 m/s | 142.1 m/min |
+| **A. Lebib** | Central Def | 0.004 | 0.000 | 0.0% | 14.6° / 32.6° | 2.63 m/s | 139.9 m/min |
+| **K. Ngo** | Wide Attacker| 0.000 | 0.000 | 0.0% | 8.1° / 16.7° | 3.95 m/s | 146.5 m/min |
+| **K. Majekodunmi**| Central Def| 0.000 | 0.000 | 0.0% | **25.0° / 36.8°** | 1.10 m/s | N/A (<Min) |
+
+*Season Physical Benchmarks (A-League Physical Aggregates, N=406): League Mean OTIP = 154.8 m/min, Median = 153.2 m/min, 95th Percentile = 178.6 m/min; Top Season PSV-99: R. Warland (29.7 km/h), J. Carluccio (29.2 km/h).*
 
 *Benchmark Context (A-League Season Physical Aggregates, N=406): Mean OTIP = 154.8 m/min, Median = 153.2 m/min, 95th Percentile = 178.6 m/min.*
 
