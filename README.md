@@ -72,7 +72,7 @@ Engineered for native integration into `databallpy` / `kloppy`:
 * `src/visualization/pitch_viz.py`: Publication-grade two-panel spatial-temporal plotting.
 
 ```bash
-git clone [https://github.com/lukaspobisml/analytics_cup_2.0.git](https://github.com/lukaspobisml/analytics_cup_2.0.git)
+git clone https://github.com/lukaspobisml/analytics_cup_2.0.git
 cd analytics_cup_2.0
 pip install -e .
 python -m unittest discover tests
