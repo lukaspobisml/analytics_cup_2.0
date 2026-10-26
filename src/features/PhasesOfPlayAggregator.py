@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 class PhasesOfPlayAggregator:
     """
@@ -22,7 +21,15 @@ class PhasesOfPlayAggregator:
             DataFrame containing phase-of-play information.
             Must include possession team IDs, phase types, timing, and metrics.
         """
-        self.phases_of_play_df = phases_of_play_df
+        self.phases_of_play_df = phases_of_play_df.copy()
+        required = ["match_id", "period", "frame_start", "frame_end",
+                    "team_in_possession_id", "team_in_possession_shortname"]
+        if self.phases_of_play_df.empty or self.phases_of_play_df[required].isna().any().any():
+            raise ValueError("Phases require nonempty, non-null match/period/frame/team identities")
+        if self.phases_of_play_df.duplicated(["match_id", "period", "frame_start"]).any():
+            raise ValueError("Phase start frames must be unique within a match and period")
+        if (self.phases_of_play_df["frame_end"] <= self.phases_of_play_df["frame_start"]).any():
+            raise ValueError("Phase end frames must follow start frames")
         self._add_team_out_of_possession_info()
         self._add_next_phase()
 
@@ -31,18 +38,20 @@ class PhasesOfPlayAggregator:
         Fill in `team_out_of_possession_id` and `team_out_of_possession_shortname`
         by swapping the two in-possession teams.
         """
-        team_ids = self.phases_of_play_df['team_in_possession_id'].unique()
-        team_names = self.phases_of_play_df['team_in_possession_shortname'].unique()
-
-        id_mapping = {team_ids[0]: team_ids[1], team_ids[1]: team_ids[0]}
-        name_mapping = {team_names[0]: team_names[1], team_names[1]: team_names[0]}
-
-        self.phases_of_play_df['team_out_of_possession_id'] = (
-            self.phases_of_play_df['team_in_possession_id'].map(id_mapping)
-        )
-        self.phases_of_play_df['team_out_of_possession_shortname'] = (
-            self.phases_of_play_df['team_in_possession_shortname'].map(name_mapping)
-        )
+        opponents = {}
+        for match_id, group in self.phases_of_play_df.groupby("match_id"):
+            teams = group[["team_in_possession_id", "team_in_possession_shortname"]].drop_duplicates()
+            if len(teams) != 2 or teams["team_in_possession_id"].nunique() != 2:
+                raise ValueError(f"Match {match_id} must identify exactly two consistent teams")
+            first, second = list(teams.itertuples(index=False, name=None))
+            opponents[(match_id, first[0])] = second
+            opponents[(match_id, second[0])] = first
+        identities = [
+            opponents[(row.match_id, row.team_in_possession_id)]
+            for row in self.phases_of_play_df.itertuples()
+        ]
+        self.phases_of_play_df["team_out_of_possession_id"] = [team[0] for team in identities]
+        self.phases_of_play_df["team_out_of_possession_shortname"] = [team[1] for team in identities]
 
     def _add_next_phase(self):
         """
@@ -50,14 +59,23 @@ class PhasesOfPlayAggregator:
         If a phase ends when another starts, record the next phase type.
         Otherwise, set 'no_next_phase'.
         """
-        self.phases_of_play_df = self.phases_of_play_df.sort_values(by=["frame_start"]).reset_index(drop=True)
+        self.phases_of_play_df = self.phases_of_play_df.sort_values(
+            by=["match_id", "period", "frame_start"]
+        ).reset_index(drop=True)
         self.phases_of_play_df["team_in_possession_next_phase"] = None
         self.phases_of_play_df["team_out_of_possession_next_phase"] = None
 
-        frame_start_to_index = {self.phases_of_play_df.loc[i, "frame_start"]: i for i in range(len(self.phases_of_play_df))}
+        frame_start_to_index = {
+            (row.match_id, row.period, row.frame_start): i
+            for i, row in enumerate(self.phases_of_play_df.itertuples())
+        }
 
         for i in range(len(self.phases_of_play_df) - 1):
-            current_frame_end = self.phases_of_play_df.loc[i, "frame_end"]
+            current_frame_end = (
+                self.phases_of_play_df.loc[i, "match_id"],
+                self.phases_of_play_df.loc[i, "period"],
+                self.phases_of_play_df.loc[i, "frame_end"],
+            )
             if current_frame_end in frame_start_to_index:
                 next_idx = frame_start_to_index[current_frame_end]
 
@@ -99,29 +117,9 @@ class PhasesOfPlayAggregator:
             avg_end_length=('team_out_of_possession_length_end', 'mean')
         ).reset_index()
 
-        next_phase_in_possession_phase_aggs = self.phases_of_play_df.groupby([
-            'team_out_of_possession_id', 'team_out_of_possession_phase_type', 'team_out_of_possession_next_phase'
-        ]).agg(count=('frame_start', 'count')).reset_index()
-
-        next_phase_in_possession_phase_aggs['team_phase_id'] = (
-                next_phase_in_possession_phase_aggs['team_out_of_possession_id'].astype(str) + '_' +
-                next_phase_in_possession_phase_aggs['team_out_of_possession_phase_type']
+        out_of_possession_phase_aggs = self._attach_transition_counts(
+            out_of_possession_phase_aggs, "team_out_of_possession"
         )
-
-        out_of_possession_phase_aggs['team_phase_id'] = (
-                out_of_possession_phase_aggs['team_out_of_possession_id'].astype(str) + '_' +
-                out_of_possession_phase_aggs['team_out_of_possession_phase_type']
-        )
-
-        for next_phase in next_phase_in_possession_phase_aggs['team_out_of_possession_next_phase'].unique():
-            next_phase_df = (
-                next_phase_in_possession_phase_aggs[
-                    next_phase_in_possession_phase_aggs['team_out_of_possession_next_phase'] == next_phase])
-
-            next_phase_mapping = dict(zip(next_phase_df['team_phase_id'], next_phase_df['count']))
-
-            out_of_possession_phase_aggs[f'count_into_{next_phase}_from'] = (
-                out_of_possession_phase_aggs['team_phase_id'].map(next_phase_mapping))
 
         out_of_possession_phase_aggs = out_of_possession_phase_aggs.set_index([
             'match_id', 'team_out_of_possession_id', 'team_out_of_possession_shortname', 'team_out_of_possession_phase_type'
@@ -141,11 +139,9 @@ class PhasesOfPlayAggregator:
                            'count_into_low_block_from', 'count_into_medium_block_from', 'count_into_high_block_from',
                            'count_into_defending_quick_break_from', 'count_into_defending_transition_from',
                            'count_into_defending_direct_from']:
-                if f'{metric}_{phase}' not in out_of_possession_phase_aggs.columns:
-                    out_of_possession_phase_aggs[f'{metric}_{phase}'] = np.nan
                 metric_columns.append(f'{metric}_{phase}')
 
-        return out_of_possession_phase_aggs[group_by[:3] + metric_columns]
+        return out_of_possession_phase_aggs.reindex(columns=group_by[:3] + metric_columns)
 
     def get_in_possession_aggregates(self):
         """
@@ -172,29 +168,9 @@ class PhasesOfPlayAggregator:
             avg_end_length=('team_in_possession_length_end', 'mean')
         ).reset_index()
 
-        next_phase_in_possession_phase_aggs = self.phases_of_play_df.groupby([
-            'team_in_possession_id', 'team_in_possession_phase_type', 'team_in_possession_next_phase'
-        ]).agg(count=('frame_start', 'count')).reset_index()
-
-        next_phase_in_possession_phase_aggs['team_phase_id'] = (
-                next_phase_in_possession_phase_aggs['team_in_possession_id'].astype(str) + '_' +
-                next_phase_in_possession_phase_aggs['team_in_possession_phase_type']
+        in_possession_phase_aggs = self._attach_transition_counts(
+            in_possession_phase_aggs, "team_in_possession"
         )
-
-        in_possession_phase_aggs['team_phase_id'] = (
-                in_possession_phase_aggs['team_in_possession_id'].astype(str) + '_' +
-                in_possession_phase_aggs['team_in_possession_phase_type']
-        )
-
-        for next_phase in next_phase_in_possession_phase_aggs['team_in_possession_next_phase'].unique():
-            next_phase_df = (
-                next_phase_in_possession_phase_aggs[
-                    next_phase_in_possession_phase_aggs['team_in_possession_next_phase'] == next_phase])
-
-            next_phase_mapping = dict(zip(next_phase_df['team_phase_id'], next_phase_df['count']))
-
-            in_possession_phase_aggs[f'count_into_{next_phase}_from'] = (
-                in_possession_phase_aggs['team_phase_id'].map(next_phase_mapping))
 
         in_possession_phase_aggs = in_possession_phase_aggs.set_index([
             'match_id', 'team_in_possession_id', 'team_in_possession_shortname', 'team_in_possession_phase_type'
@@ -213,8 +189,15 @@ class PhasesOfPlayAggregator:
                            'count_into_defending_quick_break_from', 'count_into_defending_transition_from',
                            'count_into_defending_direct_from']:
 
-                if f'{metric}_{phase}' not in in_possession_phase_aggs.columns:
-                    in_possession_phase_aggs[f'{metric}_{phase}'] = np.nan
                 metric_columns.append(f'{metric}_{phase}')
 
-        return in_possession_phase_aggs[group_by[:3] + metric_columns]
+        return in_possession_phase_aggs.reindex(columns=group_by[:3] + metric_columns)
+
+    def _attach_transition_counts(self, aggregates, team_prefix):
+        keys = ["match_id", f"{team_prefix}_id", f"{team_prefix}_phase_type"]
+        next_column = f"{team_prefix}_next_phase"
+        counts = self.phases_of_play_df.groupby(keys + [next_column]).size().unstack(
+            next_column, fill_value=0
+        )
+        counts.columns = [f"count_into_{phase}_from" for phase in counts.columns]
+        return aggregates.merge(counts.reset_index(), on=keys, how="left", validate="many_to_one")

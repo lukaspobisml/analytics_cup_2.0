@@ -8,6 +8,7 @@ for SkillCorner 25fps 3D Body Pose and 10fps Tracking datasets.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 import numpy as np
@@ -50,10 +51,15 @@ def stream_jsonl(filepath: str | Path) -> Generator[Dict[str, Any], None, None]:
 def extract_frame_entities(
     frame_dict: Dict[str, Any]
 ) -> Tuple[np.ndarray, Optional[Dict[str, Any]], List[Dict[str, Any]]]:
-    ball_data = frame_dict.get("ball_data", {})
-    ball_xy = np.array([ball_data.get("x", 0.0), ball_data.get("y", 0.0)], dtype=np.float64)
+    """Return ball, detected carrier and other detected players (not team/role filtered)."""
+    ball_data = frame_dict.get("ball_data") or {}
+    if any(ball_data.get(axis) is None for axis in ("x", "y")):
+        raise ValueError("frame requires finite ball x/y coordinates")
+    ball_xy = np.array([ball_data["x"], ball_data["y"]], dtype=np.float64)
+    if not np.isfinite(ball_xy).all():
+        raise ValueError("frame requires finite ball x/y coordinates")
 
-    possession = frame_dict.get("possession", {})
+    possession = frame_dict.get("possession") or {}
     carrier_id = possession.get("player_id")
 
     carrier_dict = None
@@ -70,6 +76,9 @@ def extract_frame_entities(
 
 
 def identify_active_players(frames: List[Dict[str, Any]], min_std_m: float = 0.05) -> Set[int]:
+    """Sample-only movement filter; not a lineup/substitution detector."""
+    if not math.isfinite(min_std_m) or min_std_m < 0:
+        raise ValueError("min_std_m must be finite and nonnegative")
     trajectories: Dict[int, List[Tuple[float, float]]] = {}
     for frame in frames:
         for p in frame.get("player_data", []):
@@ -102,8 +111,8 @@ def build_team_lookup(project_root: Path) -> Dict[int, Dict[str, Any]]:
                         "team_name": str(row["team_name"]),
                         "position_group": str(row["position_group"]),
                     }
-        except Exception:
-            continue
+        except (OSError, ValueError, KeyError, pd.errors.ParserError) as exc:
+            raise ValueError(f"Cannot read team lookup from {fpath}: {exc}") from exc
     return lookup
 
 
@@ -113,11 +122,32 @@ def compute_frame_velocities(
     window: int = 5,
     fps: float = 25.0,
 ) -> Dict[int, np.ndarray]:
-    idx_start = max(0, frame_idx - window // 2)
-    idx_end = min(len(frames) - 1, idx_start + window)
-    idx_start = max(0, idx_end - window)
+    """Estimate velocity over up to ``window`` frame intervals within one period.
 
-    dt = (idx_end - idx_start) / fps
+    Frame identifiers, not list offsets, determine elapsed time. Centered differences
+    use future observations, so this helper is for retrospective analysis.
+    """
+    if not math.isfinite(fps) or fps <= 0:
+        raise ValueError("fps must be finite and positive")
+    if isinstance(window, bool) or not isinstance(window, int) or window < 1:
+        raise ValueError("window must be an integer >= 1")
+    if not isinstance(frame_idx, int) or not 0 <= frame_idx < len(frames):
+        raise ValueError("frame_idx must index a supplied frame")
+    period = frames[frame_idx].get("period")
+    lower = upper = frame_idx
+    while lower > max(0, frame_idx - window) and frames[lower - 1].get("period") == period:
+        lower -= 1
+    while upper < min(len(frames) - 1, frame_idx + window) and frames[upper + 1].get("period") == period:
+        upper += 1
+    idx_start = max(lower, frame_idx - window // 2)
+    idx_end = min(upper, idx_start + window)
+    idx_start = max(lower, idx_end - window)
+    ids = [frame["frame"] for frame in frames[idx_start:idx_end + 1]]
+    if any(not isinstance(value, (int, float)) or not math.isfinite(value) for value in ids):
+        raise ValueError("frame identifiers must be finite numbers")
+    if any(end <= start for start, end in zip(ids, ids[1:])):
+        raise ValueError("frame identifiers must increase within a period")
+    dt = (ids[-1] - ids[0]) / fps
     if dt <= 1e-5:
         return {}
 
@@ -125,6 +155,8 @@ def compute_frame_velocities(
                  for p in frames[idx_start].get("player_data", [])}
     pos_end = {p["player_id"]: np.array([p["x"], p["y"]], dtype=np.float64)
                for p in frames[idx_end].get("player_data", [])}
+    if any(not np.isfinite(pos).all() for pos in (*pos_start.values(), *pos_end.values())):
+        raise ValueError("player coordinates must be finite")
 
     return {
         pid: (p_end - pos_start[pid]) / dt

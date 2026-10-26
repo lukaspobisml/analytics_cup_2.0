@@ -25,6 +25,8 @@ import gzip
 import hashlib
 import json
 import os
+import tempfile
+from importlib.resources import files
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
@@ -34,6 +36,8 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 BODYPOSE_DIR = DATA_DIR / "bodypose"
+if not BODYPOSE_DIR.is_dir():
+    BODYPOSE_DIR = Path(str(files("src.bodypose")))
 MANIFEST_PATH = BODYPOSE_DIR / "MANIFEST.json"
 SAMPLE_PATH = BODYPOSE_DIR / "sample_1925299_phase406.jsonl.gz"
 
@@ -136,7 +140,7 @@ def download_match(match_id: int, dest_dir: Path | str = ".",
 
     The archives are roughly 600 MB each, so this is deliberately explicit
     rather than something the other helpers do implicitly. The download is
-    resumable in the sense that an already-complete file is left alone.
+    cached only when both size and SHA256 match the manifest.
 
     Args:
         match_id: Match identifier, e.g. 1925299.
@@ -159,7 +163,7 @@ def download_match(match_id: int, dest_dir: Path | str = ".",
 
     dest = Path(dest_dir).expanduser() / f"{match_id}.jsonl.zip"
     expected = meta["files"][f"raw/{match_id}.jsonl.zip"]["size_bytes"]
-    if dest.exists() and dest.stat().st_size == expected:
+    if dest.exists() and dest.stat().st_size == expected and verify_download(dest):
         return dest
 
     url = f"{meta['base_url']}/raw/{match_id}.jsonl.zip"
@@ -168,11 +172,23 @@ def download_match(match_id: int, dest_dir: Path | str = ".",
         url, headers={"Authorization": f"Bearer {token}"} if token else {}
     )
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(".zip.part")
-    with urllib.request.urlopen(request) as resp, tmp.open("wb") as out:
-        while chunk := resp.read(1 << 20):
-            out.write(chunk)
-    tmp.replace(dest)
+    tmp = None
+    try:
+        digest = hashlib.sha256()
+        with tempfile.NamedTemporaryFile(
+            dir=dest.parent, prefix=f".{dest.name}.", suffix=".part", delete=False
+        ) as out:
+            tmp = Path(out.name)
+            with urllib.request.urlopen(request) as resp:
+                while chunk := resp.read(1 << 20):
+                    digest.update(chunk)
+                    out.write(chunk)
+        if tmp.stat().st_size != expected or digest.hexdigest() != meta["files"][f"raw/{match_id}.jsonl.zip"]["sha256"]:
+            raise ValueError(f"Downloaded archive failed size/SHA256 verification: {dest.name}")
+        tmp.replace(dest)
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
     return dest
 
 
@@ -239,7 +255,9 @@ def joints_to_frame(records: Iterator[dict[str, Any]]) -> pd.DataFrame:
                     "x": x, "y": y, "z": z,
                     "p90_mae_cm": joint.get("p90_mae_cm"),
                 })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=[
+        "frame", "period", "player_id", "joint", "x", "y", "z", "p90_mae_cm"
+    ])
 
 
 def skeleton_segments(

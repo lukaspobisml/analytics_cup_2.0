@@ -1,79 +1,139 @@
-# DLOI-Pose: Dynamic Passing Lane Occlusion with 3D Body Pose & Gaze
-**Analytics Cup 2.0 Submission | Football Track: Defensive Positioning**
+# DLOI-Pose: pose-informed ground passing lane occlusion
 
-## 1. Executive Summary
-Traditional defensive tracking analytics rely on 2D circular pitch control models that treat players as isotropic points. This oversimplifies football: defenders possess directional inertia, visual scanning constraints, and physical vertical jumping ceilings. We present **DLOI-Pose**, an open-source spatiotemporal model that integrates SkillCorner 25fps 3D Body Pose (29 keypoints), 10fps tracking, and league-wide physical and event aggregates (A-League 2024/25). DLOI-Pose computes time-to-intercept reach envelopes modulated by dual anatomical gating (torso lunge readiness and visual head-gaze), 3D aerial ball flight mechanics, and counterfactual *Leave-One-Out* (LOO) cover shadow attribution.
+Analytics Cup 2.0 | Football Track: Defensive Positioning
 
----
+DLOI-Pose is an exploratory **heuristic index**, bounded between 0 (open) and
+1 (occluded), using player XY positions, optional velocities, and optional
+shoulder/head-direction proxies from SkillCorner body pose. It is **not a
+calibrated interception probability**, a causal measure of defensive value, or
+a validated physical model. There is no native databallpy/kloppy adapter.
 
-## 2. Mathematical Formulation
-Passing lane occlusion $\text{DLOI} \in [0, 1]$ is evaluated along the trajectory $\vec{r}(\lambda) = \vec{p}_{\text{ball}} + \lambda(\vec{p}_{\text{target}} - \vec{p}_{\text{ball}})$ for $\lambda \in [0.05, 1.0]$:
+## Scientific scope and withdrawn results
 
-**1. Turf Deceleration & Arrival Horizon:**
+**Aerial scoring is unsupported.** SkillCorner pose z is relative to each
+player's centroid, not height above the pitch. The previous implementation
+compared nose z to a guessed absolute ball parabola, producing unsupported
+clearance claims. `is_aerial=True` and an explicit `max_aerial_reach_m` now raise
+`NotImplementedError`, including on an empty pitch. No absolute elevation is
+inferred from ankles, noses, or the centroid.
 
-$$v_{\text{eff}}(\lambda) = \max\left(9.0,\; v_{\text{ball}} - 0.12 \cdot L \cdot \lambda\right), \qquad t_{\text{total}}(\lambda) = \frac{\lambda L}{v_{\text{eff}}(\lambda)} + t_{\text{control}}(\lambda)$$
+The former numerical result tables, claimed aerial benefit, causal scanning
+interpretations, and season ranking claims have been withdrawn pending
+reproduction and appropriate validation. In particular, neck-to-nose direction
+is **not eye gaze**, and instantaneous head/torso disagreement is not scanning
+range. The old `assets/figure1_dloi_pose.png` is a historical, unvalidated
+illustration and should not be used as evidence for the current model.
 
-**2. Dual 3D Pose Anatomical Gating:**
-Unit vectors for torso orientation $\hat{n}_{\text{torso}}$ (perpendicular to shoulders) and head-gaze $\hat{n}_{\text{gaze}}$ (neck-to-nose vector) form a unified heading $\hat{n}_j = 0.60\,\hat{n}_{\text{torso}} + 0.40\,\hat{n}_{\text{gaze}}$. Alignment with the passing ray $\cos\phi_j = \hat{n}_j \cdot \frac{\vec{r}(\lambda) - \vec{p}_j}{\|\vec{r}(\lambda) - \vec{p}_j\|}$ governs physical reaction delay $\tau_{\text{react}}$ and acceleration $a_{\text{eff}}$:
+## Implemented algorithm
 
-$$\tau_{\text{react}}(\phi_j) = 0.58 - 0.42\left(\frac{1 + \cos\phi_j}{2}\right), \qquad a_{\text{eff}}(\phi_j) = 1.80 + 3.20\left(\frac{1 + \cos\phi_j}{2}\right)$$
+`src/features/lane_occlusion.py` is the source of truth:
 
-**3. Spatiotemporal Interception & 3D Aerial Clearance:**
+1. Sample 60 equally spaced points by default along the pass, from 5% to 100%
+   of its length. This omits the immediate ball-origin region.
+2. Estimate arrival time as distance divided by an effective speed, plus up to
+   0.35 seconds of receiver control time over the final quarter. Effective speed
+   is `max(min(9, v_ball), v_ball - 0.12 * distance)`. This is an arrival-time
+   heuristic, not integrated turf-friction dynamics.
+3. Drift each defender by supplied velocity for at most 0.35 seconds. Without
+   valid pose, reaction time is 0.28 seconds, acceleration coefficient is 4.2,
+   and lunge reach is the configured baseline.
+4. Validate shoulder XY coordinates, error bounds (0 through 15 cm), and width
+   (0.15 through 0.60 m). Rotate the left-to-right shoulder axis 90 degrees for a
+   facing proxy. Validate neck/nose XY and errors for a head-direction proxy.
+   Blend these with the configured torso weight and **normalize**; if the
+   vectors cancel, retain torso direction. Unusable optional pose falls back
+   to whichever proxy remains, or to the isotropic baseline.
+5. Let alignment be `(1 + cosine_to_sample) / 2`. Pose changes reaction time to
+   `0.58 - 0.42 * alignment`, acceleration coefficient to
+   `1.8 + 3.2 * alignment`, and lunge reach to
+   `base_lunge_reach * (0.75 + alignment) / 1.45`. The default preserves the
+   original ground-pass lunge values while honoring nondefault settings.
+6. Active time is clipped to [0, 0.95] seconds. Reach is
+   `lunge + 0.5 * acceleration_coefficient * active_time**1.8`.
+   The fractional exponent and coefficients are empirical, not dimensionally
+   established acceleration physics. Combine stationary body and drifted reach
+   kernels using their maximum, then take the maximum across defenders.
+7. Let `B` be maximum point hazard and `E` the trapezoidal hazard integral over
+   the sampled pass fractions, multiplied by `1 + 0.02 * pass_length`.
+   Return `clip(1 - (1 - B) * exp(-0.60 * E), 0, 1)`.
 
-$$\Delta t_{\text{active}} = \max\left(0,\; t_{\text{total}}(\lambda) - \tau_{\text{react}}\right), \qquad R_{\text{eff}, j}(\lambda) = r_{\text{lunge}} + \frac{1}{2} a_{\text{eff}} (\Delta t_{\text{active}})^{1.8}$$
+Leave-one-out attribution subtracts the score without each defender from the
+full score, across supplied lanes. These marginal values are **not additive**;
+redundant defenders can both have zero contribution. They depend on the chosen
+targets and must not be interpreted as causal or complete defensive value.
 
-$$H_j(\lambda) = \max\left( \exp\left(-\frac{1}{2}\left[\frac{\|\vec{r}(\lambda) - \vec{p}_j\|}{r_{\text{body}}}\right]^2\right),\; \exp\left(-\frac{1}{2}\left[\frac{\|\vec{r}(\lambda) - \vec{p}_{j, \text{drift}}\|}{R_{\text{eff}, j}(\lambda)}\right]^{2.6}\right) \right) \cdot \Gamma_{\text{aerial}, j}$$
+## Quickstart
 
-For lofted trajectories $z_{\text{ball}}(\lambda)$, clearance over the defender's maximum vertical reach ($z_{\text{nose}} + 0.65\text{ m}$) attenuates risk via exponential decay:
-
-$$\Gamma_{\text{aerial}, j} = \exp\left( -0.5 \left[ \frac{\max(0,\; z_{\text{ball}}(\lambda) - z_{\text{max}})}{0.35} \right]^2 \right)$$
-
-**4. Counterfactual Cover Shadow Attribution:**
-
-$$\Delta\text{DLOI}_j = \max_{k \in \text{lanes}} \left( \text{DLOI}_{\text{full}}^{(k)} - \text{DLOI}_{-j}^{(k)} \right)$$
-
----
-
-## 3. Empirical Results & Tactical Insights
-
-### Figure 1: Spatial-Temporal DLOI-Pose Architecture
-![Figure 1: Spatial DLOI-Pose and Temporal Windows](assets/figure1_dloi_pose.png)
-*Figure 1: Match 1925299 (Phase 406). Panel A: 22 active players, 3D body pose reach/gaze cones, and tactical passing options [A]–[G]. Dashed lane [E] represents the 3D Aerial Lob over T. Mrčela. Panel B: Temporal evolution across build-up (25fps), highlighting the 3D Aerial clearance gain (shaded area) and the early central window (0.0s–1.0s).*
-
-### Table 1: Multi-Dimensional Defensive Attribution & Season Benchmark
-| Player | Position | Peak $\Delta\text{DLOI}$ | Mean $\Delta\text{DLOI}$ | Shadow Share | 3D Scan $\Delta\psi$ (Mean / P90) | Phase Speed | Season OTIP |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **T. Gomulka** | Midfield | **0.991** | **0.184** | **49.7%** | 12.1° / 22.2° | 3.45 m/s | **172.1 m/min** |
-| **T. Mrčela** | Central Def | 0.986 | **0.085** | **23.0%** | **19.6°** / 30.4° | 3.16 m/s | 139.9 m/min |
-| **J. Risdon** | Full Back | 0.442 | **0.044** | **11.9%** | 19.1° / **32.9°** | 2.62 m/s | 139.8 m/min |
-| **N. Pennington**| Center Fwd | 0.920 | **0.042** | **11.4%** | 15.3° / 27.5° | 3.54 m/s | 170.3 m/min |
-| **R. Warland** | Full Back | 0.308 | 0.009 | 2.4% | N/A (Off-Camera) | **4.06 m/s** | 148.1 m/min |
-| **J. Carluccio** | Full Back | 0.216 | 0.005 | 1.4% | 11.1° / 19.3° | 4.02 m/s | 151.8 m/min |
-| **D. Williams** | Wide Attacker| 0.123 | 0.001 | 0.3% | 12.7° / 24.2° | 3.90 m/s | 142.1 m/min |
-| **A. Lebib** | Central Def | 0.004 | 0.000 | 0.0% | 14.6° / 32.6° | 2.63 m/s | 139.9 m/min |
-| **K. Ngo** | Wide Attacker| 0.000 | 0.000 | 0.0% | 8.1° / 16.7° | 3.95 m/s | 146.5 m/min |
-| **K. Majekodunmi**| Central Def| 0.000 | 0.000 | 0.0% | **25.0° / 36.8°** | 1.10 m/s | N/A (<Min) |
-
-*Season Physical Benchmarks (A-League Physical Aggregates, N=406): League Mean OTIP = 154.8 m/min, Median = 153.2 m/min, 95th Percentile = 178.6 m/min; Top Season PSV-99: R. Warland (29.7 km/h), J. Carluccio (29.2 km/h).*
-
-### Tactical Findings
-1. **Uncovering Non-Contact Value:** Taras Gomulka generated **49.7%** of Perth Glory's marginal cover shadow without recording an event tackle or interception. His spatial containment closed option [D] (occlusion rising from 0.15 to 0.81), directly explained by his league-leading off-ball workload (**172.1 m/min OTIP**, top 5% league-wide).
-2. **Kinematic Window Dynamics:** Carrier Walid Shour (season completion rate 91.3%) faced an open pocket to Jay O'Shea ([C], DLOI 0.18) at $t = 0.0\text{s}$. As the central block converged ($t = 2.4\text{s}$), central risk escalated past 0.80, validating his tactical shift to [A] Wide Wing Space (DLOI 0.17).
-3. **The 3D Aerial Advantage:** While ground progression into the left half-space was blocked by Mrčela (DLOI 0.39 to 0.96), an aerial lob clearing Mrčela's 2.39m reach envelope reduced initial occlusion to **0.28** (a **28.2% risk reduction**), unlocking deep channel access for Keegan Jelacic.
-4. **Locomotor-Visual Trade-off ($r = -0.877$):** Sprinting defenders (Carluccio, Ngo, $v > 3.9\text{ m/s}$) suffered visual narrowing down to $8.1^\circ$, whereas compact block defenders scanned up to $36.8^\circ$ (P90), identifying blind-spot cutback vulnerabilities.
-
----
-
-## 4. Open-Source Architecture & Quickstart
-Engineered for native integration into `databallpy` / `kloppy`:
-* `src/data/data_loader.py`: JSONL streaming parser, frozen ghost-coordinate filtering, and velocity kinematics.
-* `src/features/pose_orientation.py`: 5-factor shoulder/neck-gaze vector extraction.
-* `src/features/lane_occlusion.py`: Vectorized DLOI-Pose engine with 3D aerial trajectories and LOO attribution.
-* `src/visualization/pitch_viz.py`: Publication-grade two-panel spatial-temporal plotting.
+Python 3.9 or newer is required.
 
 ```bash
 git clone https://github.com/lukaspobisml/analytics_cup_2.0.git
 cd analytics_cup_2.0
-pip install -e .
-python -m unittest discover tests
-jupyter notebook defensive_lane_occlusion.ipynb
+python -m pip install -e ".[notebook]"
+python -m unittest discover -s tests -v
+jupyter notebook notebooks/defensive_lane_occlusion.ipynb
+```
+
+The notebook uses only the committed compressed phase sample, without downloads
+or installation commands inside cells. It demonstrates ground scoring,
+quality reports, attribution and temporal plotting; it makes no empirical
+validation claim. Outputs are intentionally cleared in version control.
+
+```python
+import numpy as np
+from src.features import DefensiveLaneOcclusion
+
+model = DefensiveLaneOcclusion()
+score = model.compute_frame_occlusion(
+    [0, 0], [20, 0], np.array([[10, 2]], dtype=float), use_pose=False
+)
+```
+
+Positions/velocities must be finite, with shapes `(2,)` and `(N, 2)`.
+Use `np.empty((0, 2))` for no defenders. Metadata, when supplied, must contain
+one dictionary per defender; missing joint observations are permitted.
+Invalid required inputs raise `ValueError`; empty candidate lane dictionaries
+are rejected. A zero-length ground pass or no defenders returns zero.
+
+## Data, installation and reproducibility
+
+- `src/data/pose_loading.py` streams the packaged compressed sample. Full-match
+  downloads are explicit (~600 MB each); cached and new downloads are checked
+  against manifest size and SHA256 before reuse/publication.
+- The upstream manifest URL currently uses mutable `main`. Checksums detect
+  content changes but do not pin the upstream revision. Full matches were not
+  downloaded for the audit.
+- Pose is 25 fps, tracking is 10 fps. Frame conversions are explicit. Velocity
+  estimation uses actual frame gaps within the same period. Its centered
+  differences use future observations and are for retrospective analysis.
+- `identify_active_players` is a sample-only movement filter, **not** lineup or
+  substitution inference. `build_team_lookup` is seeded with match 1925299's
+  roster and is not a general historical roster resolver.
+- `extract_frame_entities` returns other detected players, not a team-filtered
+  outfield defense. The caller must select opponents and roles.
+- Wheels include the manifest and compressed sample, with explicit `src.*`
+  package discovery. CI imports the installed package outside the checkout.
+- `src.data.basic_loading.load_match` explicitly returns events, phases and a
+  lazy tracking iterator; importing that module no longer loads a full match.
+- Build the minimal documentation site with `python -m pip install -e ".[docs]"`
+  and `python -m mkdocs build --strict`.
+
+## Remaining limitations and audit follow-up
+
+Ground kernels, time constants, target choices and pose blending need
+sensitivity analysis and held-out outcome calibration. The short single-period
+sample cannot establish full-match behavior or causal tactical conclusions.
+Off-camera coverage, detection errors and pose/XY misalignment remain material
+sources of bias.
+
+Phase aggregation now isolates match/period transitions and per-match counts;
+it requires two consistent team identities per match and rejects ambiguous
+subsets. Dynamic-event `metric_sum_pass_opportunities` still sums **option-row**
+values even where intervals overlap, while opportunity counts merge intervals.
+An opportunity-level value definition (e.g. maximum versus first value) is
+unresolved and was deliberately not guessed.
+
+Height-aware scoring requires validated pitch-relative player reach and ball
+trajectory inputs before reintroduction. The historical season/tactical results
+need a reproducible analysis with explicit denominators, coverage, uncertainty,
+and provenance before they can be republished.

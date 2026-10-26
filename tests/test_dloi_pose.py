@@ -5,7 +5,7 @@ Automated verification suite for DLOI-Pose:
 - Boundary conditions & numerical stability
 - 3D pose alignment & visual gaze sensitivity
 - Monotonicity across orientations (facing >= side >= turned)
-- 3D aerial clearance gating vs standing/jumping vertical reach
+- Explicit rejection of unsupported aerial scoring
 - Zero-length passes, missing joints & high MAE noise resilience
 """
 
@@ -132,14 +132,14 @@ class TestDLOIPose(unittest.TestCase):
         self.assertAlmostEqual(score_noisy, score_base, places=4)
         self.assertAlmostEqual(score_none, score_base, places=4)
 
-    def test_aerial_clearance_filtering(self):
+    def test_aerial_scoring_is_unsupported(self):
         carrier = np.array([0.0, 0.0], dtype=np.float64)
         target = np.array([25.0, 0.0], dtype=np.float64)
         blocker_xy = np.array([[12.5, 0.0]], dtype=np.float64)
 
-        score_ground = self.engine.compute_frame_occlusion(carrier, target, blocker_xy, is_aerial=False, use_pose=False)
-        score_aerial = self.engine.compute_frame_occlusion(carrier, target, blocker_xy, is_aerial=True, use_pose=False)
-        self.assertLess(score_aerial, score_ground)
+        for defenders in (blocker_xy, np.empty((0, 2))):
+            with self.assertRaisesRegex(NotImplementedError, "pitch-relative"):
+                self.engine.compute_frame_occlusion(carrier, target, defenders, is_aerial=True)
 
     def test_mathematical_bounds_and_stability(self):
         carrier = np.array([-52.0, -33.0], dtype=np.float64)

@@ -97,7 +97,9 @@ you. It records where the full files live and what each one should look like whe
 
 ## Loading
 
-See `src/data/pose_loading.py` for helpers, and the tutorial in `notebooks/tutorials/05_Body_Pose/`.
+See `src/data/pose_loading.py` for helpers and
+[`notebooks/defensive_lane_occlusion.ipynb`](../../notebooks/defensive_lane_occlusion.ipynb)
+for a ground-pass demonstration. Absolute-height aerial scoring is unsupported.
 
 ### The sample committed here
 
@@ -111,9 +113,9 @@ joints = joints_to_frame(iter_sample())     # 143,637 rows, one per joint per pl
 
 ### A full match from Hugging Face
 
-`download_match` fetches the archive to a directory of your choosing and skips the download if the
-file is already there at the right size. `verify_download` is the stricter check — it reads the
-whole file and compares its fingerprint to `MANIFEST.json`, so run it once after downloading.
+`download_match` fetches the archive to a directory of your choosing and skips the download only
+when size and SHA256 match the manifest. New downloads are verified before replacing the destination.
+`verify_download` can also check an archive explicitly.
 `iter_match` then streams frames straight out of the zip, without extracting 3.3 GB to disk.
 
 ```python

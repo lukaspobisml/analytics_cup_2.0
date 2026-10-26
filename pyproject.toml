@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dloi-pose"
 version = "0.2.0"
-description = "Dynamic Passing Lane Occlusion Index with 3D Body Pose & Gaze for Football Analytics"
+description = "Exploratory pose-informed ground passing lane occlusion for football analytics"
 readme = "README.md"
 authors = [{ name = "Analytics Cup 2.0 Contributor" }]
 license = { text = "MIT" }
@@ -23,10 +23,23 @@ dependencies = [
     "matplotlib>=3.5.0",
     "mplsoccer>=1.2.0",
     "shapely>=1.8.0",
+    "humanize>=4.0",
 ]
 
 [project.optional-dependencies]
 test = ["pytest>=7.0.0"]
+notebook = ["jupyter>=1.0"]
+docs = ["mkdocs>=1.6"]
+
+[tool.setuptools]
+packages = ["src", "src.data", "src.features", "src.visualization", "src.bodypose"]
+
+[tool.setuptools.package-dir]
+"src" = "src"
+"src.bodypose" = "data/bodypose"
+
+[tool.setuptools.package-data]
+"src.bodypose" = ["MANIFEST.json", "*.jsonl.gz"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

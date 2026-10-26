@@ -1,20 +1,21 @@
-import os
+"""Explicit match-table loading; importing this module performs no data IO."""
+
+from pathlib import Path
+
 import pandas as pd
 
-match_id = 1886347
+from src.data.data_loader import stream_jsonl
 
-# Resolve data directory absolute path relative to this script
-base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-data_dir = os.path.join(base_dir, "data")
 
-# Dynamic Events
-de_match = pd.read_csv(os.path.join(data_dir, "matches", str(match_id), f"{match_id}_dynamic_events.csv"))
+def load_match(match_id=1886347, data_dir=None):
+    """Return event/phase DataFrames and a lazy tracking iterator.
 
-# Phases of Play
-pop_match = pd.read_csv(os.path.join(data_dir, "matches", str(match_id), f"{match_id}_phases_of_play.csv"))
-
-# Tracking Data
-tracking_data = pd.read_json(
-    os.path.join(data_dir, "matches", str(match_id), f"{match_id}_tracking_extrapolated.jsonl"), lines=True
-)
-
+    Whole-match tracking is deliberately not materialized into a DataFrame.
+    ``data_dir`` is required outside a repository checkout.
+    """
+    root = Path(data_dir) if data_dir is not None else Path(__file__).resolve().parents[2] / "data"
+    directory = root / "matches" / str(match_id)
+    events = pd.read_csv(directory / f"{match_id}_dynamic_events.csv")
+    phases = pd.read_csv(directory / f"{match_id}_phases_of_play.csv")
+    tracking = stream_jsonl(directory / f"{match_id}_tracking_extrapolated.jsonl")
+    return events, phases, tracking

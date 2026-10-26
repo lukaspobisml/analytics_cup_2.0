@@ -23,7 +23,10 @@ def count_pass_opportunities(x):
 # Helper function to get th sum of a value in pass opportunities
 def metric_sum_pass_opportunities(x, column="xthreat"):
     """
-    Sum values from a specific column (e.g., pass_distance) across non-overlapping intervals.
+    Sum option-row values, including rows with overlapping intervals.
+
+    This legacy metric is not one value per merged pass opportunity. Choosing
+    first/max/etc. per opportunity requires a separate methodological definition.
 
     Args:
         x (pd.DataFrame): Data for a specific context.
